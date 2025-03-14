@@ -1,48 +1,114 @@
-![Logo Minsait](imgs/logo_minsait.jpg)
-***
-# Teste Técnico
-## Engenheiro de Dados Pleno
+# Documentação da Solução
 
-### Introdução
-Este teste é direcionado para profissionais que desejam atuar como Engenheiro de Dados Pleno na Minsait. 
+## Visão Geral
 
-O processo seletivo prevê a contratação de 1 profissional para atuação em projetos de Big Data e Engenharia de Dados na [Secretaria de Estado da Saúde de Goiás](https://www.saude.go.gov.br/).
+Esta documentação descreve uma solução open-source para processar arquivos no padrão HL7 FHIR (em formato JSON), armazená-los em um banco de dados relacional e disponibilizá-los para consultas analíticas e visualização. A arquitetura é projetada para ser executada localmente, atendendo às restrições de não utilizar serviços em nuvem ou ferramentas pagas.
 
-### Contextualização
-Na pasta `data` deste repositório há 1.180 arquivos JSON. Cada arquivo representa a história clínica de um paciente fictício no padrão HL7 FHIR.
+**Objetivo**: Responder perguntas analíticas como "Quais são as 10 condições mais comuns?", "Quais são os 10 medicamentos mais prescritos?" e "Quantos pacientes são do sexo masculino?" a partir de dados.
 
-## Objetivo
-Planejar e implementar uma arquitetura que permita a realização de análises e criação de dashboards a partir desses dados. A solução deve prover uma interface que possibilite consultas aos dados de forma agregada por um Analista de BI ou Cientista de Dados.
+**Data Atual**: 14 de março de 2025.
 
-Preferencialmente, a arquitetura deve permitir a consulta aos dados por meio de SQL em uma ferramenta de visualização de dados (como Metabase, Superset, Power BI e outros).
+---
 
-Por meio dessa interface, deve ser possível responder perguntas como:
+## Arquitetura
 
-### Quais são as 10 condições médicas mais comuns? 
-Contagem de `entries` onde o `resource.resourceType` é "Condition", agrupando pela condição (`resource.code.text`), ordenando do maior para o menor número de ocorrências, limitando a 10 resultados.
+A solução segue um pipeline ETL com os seguintes componentes:
 
-### Quais são os 10 medicamentos mais prescritos?
-Contagem de `entries` onde o `resource.resourceType` é "MedicationRequest", agrupando pelo medicamento (`resource.medicationCodeableConcept.text`), ordenando do maior para o menor número de prescrições, limitando a 10 resultados.
+1. **Ingestão de Dados**: Scripts Python para ler arquivos JSON.
+2. **Transformação**: Normalização dos dados em tabelas relacionais.
+3. **Armazenamento**: Banco de dados PostgreSQL.
+4. **Visualização**: Ferramenta de BI Metabase.
 
-### Quantos pacientes são do sexo masculino?
-Contagem de `entries` onde o `resource.resourceType` é "Patient" e o sexo (`resource.gender`) é "male".
+### Diagrama da Arquitetura
 
-### Restrições Técnicas
-- Todas as ferramentas e tecnologias utilizadas na arquitetura devem ser de código aberto (open source)
-- A solução deve ser executada localmente, em ambiente on-premise
-- Não é permitido o uso de serviços em nuvem (AWS, Azure, GCP, etc)
+```
+ _______________       ___________________       ____________       __________
+[               ]     [                   ]     [            ]     [          ]
+[ Arquivos JSON ] --> [ Script Python ETL ] --> [ PostgreSQL ] --> [ Metabase ]
+[_______________]     [___________________]     [____________]     [__________]
+```
 
-### Observações Adicionais
-- Considere que o volume de dados pode crescer para a casa de centenas de milhões de registros.
-- Cada consulta não deve levar mais do que poucos segundos para ser processada.
-- Além do código, é importante apresentar a documentação da arquitetura (diagramas e texto)
+- **Arquivos padrão HL7 FHIR JSON**: Dados brutos na pasta `data`.
+- **Script Python ETL**: Processa os arquivos e carrega os dados no banco.
+- **PostgreSQL**: Armazena os dados em tabelas otimizadas.
+- **Metabase**: Interface para consultas SQL e dashboards.
 
-## Prazo
-O prazo para entrega do teste é de 7 dias corridos a partir da data de envio do mesmo por e-mail.
+---
 
-## Entrega
-Todos os artefatos produzidos deverão ser organizados em um repositório público no GitHub vinculado à sua conta pessoal.
+## Ferramentas Utilizadas
 
-Ao final do prazo de entrega do teste, envie o link do repositório com todos os entregáveis para o e-mail [wsmarques@minsait.com](mailto:wsmarques@minsait.com). 
+Todas as ferramentas são open-source e podem ser executadas localmente:
 
-Após o recebimento, caso o resultado seja satisfatório, entraremos em contato para agendar uma reunião (última fase do processo seletivo)
+| Ferramenta       | Função                          | Justificativa                                  |
+|------------------|---------------------------------|------------------------------------------------|
+| **Python**       | Pipeline ETL                   | Flexível para manipular JSON e integrar com DB |
+| **PostgreSQL**   | Banco de dados relacional      | Robusto, escalável e otimizado para análises   |
+| **Metabase**     | Visualização e consultas       | Interface amigável, suporta SQL nativo         |
+
+---
+
+## Estrutura do Banco de Dados
+
+Os dados FHIR são normalizados em tabelas relacionais para otimizar consultas. Abaixo estão as principais tabelas propostas:
+
+### Tabela: `patients` (entry.resource.resourceType == Patient)
+| Coluna       | Tipo         | Descrição                      |
+|--------------|--------------|--------------------------------|
+| `id`         | VARCHAR(50) | Chave primária                 |
+| `gender`     | VARCHAR(50)  | Gênero (`male`, `female`, etc.)|
+| `birth_date` | DATE         | Data de nascimento             |
+
+### Tabela: `conditions` (entry.resource.resourceType == Condition)
+| Coluna          | Tipo         | Descrição                          |
+|-----------------|--------------|------------------------------------|
+| `id`            | VARCHAR(50)  | Chave primária                     |
+| `patient_id`    | VARCHAR(50)  | Chave estrangeira (`patients.id`)  |
+| `condition_text`| TEXT         | Código/descrição da condição       |
+| `recorded_date` | DATE         | Data de registro (se disponível)   |
+
+### Tabela: `medication_requests` (entry.resource.resourceType == MedicationRequest)
+| Coluna            | Tipo         | Descrição                          |
+|-------------------|--------------|------------------------------------|
+| `id`              | VARCHAR(50)  | Chave primária                     |
+| `patient_id`      | VARCHAR(50)  | Chave estrangeira (`patients.id`)  |
+| `medication_text` | TEXT         | Nome do medicamento                |
+| `authored_on`     | DATE         | Data da prescrição (se disponível) |
+
+---
+
+## Consultas SQL
+
+### 10 Condições Mais Comuns
+```sql
+SELECT condition_text, COUNT(*) as count
+FROM conditions
+GROUP BY condition_text
+ORDER BY count DESC
+LIMIT 10;
+```
+
+### 10 Medicamentos Mais Prescritos
+```sql
+SELECT medication_text, COUNT(*) as count
+FROM medication_requests
+GROUP BY medication_text
+ORDER BY count DESC
+LIMIT 10;
+```
+
+### Pacientes do Sexo Masculino
+```sql
+SELECT COUNT(*) as male_patients
+FROM patients
+WHERE gender = 'male';
+```
+
+---
+
+## Justificativas Técnicas
+
+- **Python**: Ideal para manipulação de JSON e integração com bancos de dados.
+- **PostgreSQL**: Suporta grandes volumes de dados e consultas analíticas com alta performance.
+- **Metabase**: Simples de usar, suporta SQL nativo e é open-source.
+
+---
